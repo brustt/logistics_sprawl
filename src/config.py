@@ -21,10 +21,10 @@ dept_list = ["01", "38", "69"]
 
 # chemins bati indus & communes for roi and year
 bati_indus_roi_dir = os.path.join(processed_data_path, "{}", "{}", "BDTOPO") #name, year
-bati_indus_file_name = "bati_indus_{}_{}.parquet"
+bati_indus_file_name = "bati_indus_{}_{}.gpkg"
 
 communes_roi_dir = os.path.join(processed_data_path, "{}", "{}", "BDTOPO") #name, year
-communes_roi_file_name = "communes_{}_{}.parquet" #name, #year
+communes_roi_file_name = "communes_{}_{}.gpkg" #name, #year
 
 
 
@@ -40,7 +40,7 @@ ze_name = "ze_{}_{}km.gpkg"
 #ze_com_path = os.path.join(processed_data_path, "{}", {},"ZoneEtude")
 
 """entrepots"""
-warehouse_name = "Entrepots_{}_{}_{}km.parquet"
+warehouse_name = "Entrepots_{}_{}_{}km.gpkg"
 #warehouse_path = os.path.join(processed_data_path, "{}", "ZoneEtude")
 
 
@@ -58,4 +58,4 @@ SirenFPath = os.path.join(raw_data_path, "SIREN", "StockEtablissementHistorique_
 
 # OUT : 
 geosiren_name = "GeoSiren_{}_{}km.parquet"
-siren_name = "SIREN_Entrepots_{}.parquet"
+siren_name = "SIREN_Entrepots_{}.csv"

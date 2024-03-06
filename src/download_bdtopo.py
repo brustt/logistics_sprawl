@@ -64,7 +64,7 @@ def parse_html(content, dept: str, year: int, format="SHP") -> str:
     if not href: 
         raise ValueError(f"archive file not found for {dept} - {year}")
     if  len(href) > 1: 
-        # select ancient update = keep old nomenclature
+        # select ancient update = keep old nomenclature => only new for 2023 ?
         tuple_href = [(Path(h).stem, h) for h in href]
         return sorted(tuple_href, key= lambda x: x[0], reverse=False)[0][1]
         
@@ -145,6 +145,7 @@ def _extract_bati_new_bdtopo(list_path) -> List[gpd.GeoDataFrame]:
  
 
 def _extract_bati_old_bdtopo(list_path: List[str]) -> List[gpd.GeoDataFrame]: 
+    print(list_path)
     list_df = [gpd.read_file(path, crs=CRS) for path in list_path]
     return list_df
     
@@ -248,8 +249,8 @@ def pipeline_bdtopo_year(dept_list: List[str],
     bati = pd.concat(bati)
 
     # Save
-    bati.to_crs(CRS).to_parquet(os.path.join(out_dir_processed, bati_indus_file_name.format(name_roi, year)))
-    communes.to_crs(CRS).to_parquet(os.path.join(out_dir_processed, communes_roi_file_name.format(name_roi, year)))
+    bati.to_crs(CRS).to_file(os.path.join(out_dir_processed, bati_indus_file_name.format(name_roi, year)))
+    communes.to_crs(CRS).to_file(os.path.join(out_dir_processed, communes_roi_file_name.format(name_roi, year)))
 
     print(f"year {year} done")
     if clean_dir: 
