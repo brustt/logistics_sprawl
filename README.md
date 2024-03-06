@@ -19,6 +19,7 @@ Installation :
 
 * Create virtual env (mamba, virtualenv whetever you like) and activate it.
 
+* create `.env` file at the project directory level
 
 * Install dependencies : 
 ```
@@ -29,5 +30,9 @@ pip install -r requirements.txt
 ```
 pip install -e .
 ```
+
+create `data` directory
+
+download SIREN data from https://drive.google.com/drive/folders/1y2DO8XNg6cGofzZwt_kVRMnDGZs4SE82 in `data/raw`
 
 * Define region of interest in config.py (centroid, buffer size and name)

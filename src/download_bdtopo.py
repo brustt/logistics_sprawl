@@ -23,10 +23,11 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Any
 from src.utils import check_dir
 
+
 from src.config import *
 
 
-def _download(url): 
+def _download(url) -> requests.Response: 
     try:
         res = requests.get(url)
     except:
@@ -37,10 +38,10 @@ def _download(url):
         raise requests.HTTPError("Download Fail")
 
 
-def download_html(url): 
+def download_html(url) -> requests.Response: 
     return _download(url)
     
-def download_7z(url, out_dir):
+def download_7z(url, out_dir) -> str:
     print(f"Go to to {url}")
     content =  _download(url)
     out_path = os.path.join(out_dir, os.path.basename(url))
@@ -51,7 +52,7 @@ def download_7z(url, out_dir):
 
 
 
-def parse_html(content, dept: str, year: int, format="SHP"):
+def parse_html(content, dept: str, year: int, format="SHP") -> str:
     
     soup = BeautifulSoup(content, "html.parser")
     hrefs = [_["href"] for _ in soup.find_all('a', href=True)]
@@ -74,9 +75,12 @@ def download_bdtopo(out_dir:str,
                     dept: str, 
                     year: int, 
                     url:str, 
-                    format="SHP"):
+                    format="SHP") -> str:
+    
     content = download_html(url)
+    
     href = parse_html(content, dept, year)
+    
     out_path = os.path.join(out_dir, os.path.basename(href))
     
     if not os.path.exists(out_path):
@@ -87,7 +91,7 @@ def download_bdtopo(out_dir:str,
 
 
 
-def extract_7z(arch_path, out_dir): 
+def extract_7z(arch_path, out_dir) -> str: 
     
     fname = Path(arch_path).stem
     out_path = os.path.join(out_dir, fname)
@@ -103,7 +107,7 @@ def extract_7z(arch_path, out_dir):
     return out_path
 
 
-def extract_bati_path(dir_path):
+def extract_bati_path(dir_path) -> str:
     
     target_bati_dir = ["E_BATI", "BATI"]
     target_dir_path=None
@@ -117,7 +121,7 @@ def extract_bati_path(dir_path):
     return target_dir_path
 
 
-def _extract_bati_new_bdtopo(list_path): 
+def _extract_bati_new_bdtopo(list_path) -> List[gpd.GeoDataFrame]: 
     """
     for nomenclature >= bdtopo 2023
     """
@@ -140,12 +144,12 @@ def _extract_bati_new_bdtopo(list_path):
     return list_df
  
 
-def _extract_bati_old_bdtopo(list_path): 
+def _extract_bati_old_bdtopo(list_path: List[str]) -> List[gpd.GeoDataFrame]: 
     list_df = [gpd.read_file(path, crs=CRS) for path in list_path]
     return list_df
     
     
-def extract_bati_indus(list_path, year): 
+def extract_bati_indus(list_path: List[str], year: str) -> List[gpd.GeoDataFrame]: 
     
     years_new_nomenclature = ["2023"]
     
@@ -156,7 +160,7 @@ def extract_bati_indus(list_path, year):
 
     
 
-def extract_bati_on_roi(path, roi, year):
+def extract_bati_on_roi(path: str, roi: gpd.GeoDataFrame, year: str) -> gpd.GeoDataFrame:
 
     
     target_prefix_f = ["BATI_INDUSTRIEL", "BATIMENT"]
@@ -171,7 +175,7 @@ def extract_bati_on_roi(path, roi, year):
     
     return df_y
 
-def extract_communes_path(dir, ext): 
+def extract_communes_path(dir: str, ext: str) -> str: 
     target_dir_path = None
     for r, dirs, files in os.walk(dir): 
         if any([_ for _ in files if _ == f"COMMUNE{ext}"]):
@@ -179,7 +183,7 @@ def extract_communes_path(dir, ext):
             break
     return target_dir_path
 
-def extract_communes_on_roi(path, roi):
+def extract_communes_on_roi(path: str, roi: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     extracts communes which intersects roi buffer
     """
@@ -194,7 +198,7 @@ def pipeline_bdtopo_year(dept_list: List[str],
                     year: str, 
                     centroid: tuple,
                     format="SHP", 
-                    clean_dir=True):
+                    clean_dir=True) -> None:
     
     """download industrial building from bdtopo
 
@@ -207,7 +211,9 @@ def pipeline_bdtopo_year(dept_list: List[str],
         clean_dir (bool, optional): clean bdtopo full directories. Defaults to True.
     """
 
-    out_dir_raw = check_dir(raw_data_path, "BDTOPO", year)
+    out_dir_raw = check_dir(raw_data_path, name_roi, year, "BDTOPO")
+    out_dir_processed = check_dir(bati_indus_roi_dir.format(name_roi, year))
+
     # workaround for 2023 new nomenclature - flr
     ext_file = ".SHP" if year !="2023" else ".shp"
 
@@ -242,24 +248,22 @@ def pipeline_bdtopo_year(dept_list: List[str],
     bati = pd.concat(bati)
 
     # Save
-    bati.to_file(os.path.join(bati_indus_roi_dir.format(name_roi, year), bati_indus_file_name.format(name_roi, year)))
-    communes.to_file(os.path.join(communes_roi_dir, communes_roi_file_name.format(year)))
+    bati.to_parquet(os.path.join(out_dir_processed, bati_indus_file_name.format(name_roi, year)))
+    communes.to_parquet(os.path.join(out_dir_processed, communes_roi_file_name.format(name_roi, year)))
 
     print(f"year {year} done")
     if clean_dir: 
         shutil.rmtree(bd_path)
 
 
+if __name__ == "__main__":
+    metro = '_'.join(METRO_NAME.lower().split(" "))
 
-
-metro = '_'.join(METRO_NAME.lower().split(" "))
-
-for year in selected_year:
-    print(f"==== {year} ====")
-    pipeline_bdtopo_year(dept_list=dept_list,
-                        name_roi=metro,
-                        year=year, 
-                        url=URL_BDTOPO, 
-                        centroid=CENTER,
-                        format="SHP", 
-                        clean_dir=False)
+    for year in selected_year:
+        print(f"==== {year} ====")
+        pipeline_bdtopo_year(dept_list=dept_list,
+                            name_roi=metro,
+                            year=year, 
+                            centroid=CENTER,
+                            format="SHP", 
+                            clean_dir=False)
