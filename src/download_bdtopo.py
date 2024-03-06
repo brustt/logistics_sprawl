@@ -248,8 +248,8 @@ def pipeline_bdtopo_year(dept_list: List[str],
     bati = pd.concat(bati)
 
     # Save
-    bati.to_parquet(os.path.join(out_dir_processed, bati_indus_file_name.format(name_roi, year)))
-    communes.to_parquet(os.path.join(out_dir_processed, communes_roi_file_name.format(name_roi, year)))
+    bati.to_crs(CRS).to_parquet(os.path.join(out_dir_processed, bati_indus_file_name.format(name_roi, year)))
+    communes.to_crs(CRS).to_parquet(os.path.join(out_dir_processed, communes_roi_file_name.format(name_roi, year)))
 
     print(f"year {year} done")
     if clean_dir: 
