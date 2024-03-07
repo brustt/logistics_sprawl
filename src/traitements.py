@@ -162,7 +162,7 @@ def TraitementGeoSiren(centroid,
                 )
             .drop(["index_right"], axis=1)
         )
-        logger.info(f"Save geosiren on roi.. : {geosiren.columns}")
+        logger.info(f"Save geosiren on roi..")
 
         # Enregistre le GeoSiren de la zone d'étude
         out_dir_siren = check_dir(root_out_dir, "SIREN")
@@ -235,8 +235,6 @@ def JoinSirenGeosiren(siren_date_path: str,
         
         siren_date = pd.read_csv(siren_date_path)
         geosiren_zone = gpd.read_file(geosiren_zone_path)
-        print(f"siren : {siren_date.shape}")
-        print(f"geosiren : {geosiren_zone.shape}")
 
         # Jointure sur le champ SIRET - we convert to int  - doesn't matter
         siren_date["siret"] = siren_date["siret"].astype(int)
@@ -244,7 +242,6 @@ def JoinSirenGeosiren(siren_date_path: str,
 
         merged_siren = pd.merge(siren_date, geosiren_zone, on="siret")
         merged_siren = gpd.GeoDataFrame(merged_siren, geometry="geometry", crs=CRS)
-        print(merged_siren.columns)
         # Enregistre la jointure
         merged_siren.to_file(make_path(wh_file_name, root_out_dir), index=False)
         logger.info(f"MERGE SIREN : {merged_siren.shape}")
@@ -325,15 +322,15 @@ def AppSirenBDTopo(name: str,
 
         # Calcul des bâtiment de la bdtopo correspondant à un point d'entrepôt siren et dont la surface est plus grande que le seuil voulu
         bati_indus_ent = bati_indus[bati_indus["geometry"].intersects(lines_app.unary_union) | bati_indus["geometry"].intersects(entrepots_siren.unary_union)]
-        #bati_indus_ent = bati_indus[bati_indus["geometry"].intersects(lines_app.unary_union)]
-        #bati_indus_ent = gpd.sjoin(bati_indus, lines_app[["geometry"]], how="inner", predicate="intersects").drop("index_right", axis=1)
         bati_indus_ent = bati_indus_ent[bati_indus_ent["geometry"].area > seuil_surf_ent]
         
         # Enregistrement des entrepôts à la date voulue
         
-        bati_indus_ent.to_file(make_path(appariement_file_name, root_out_dir))
+        bati_indus_ent = bati_indus_ent.drop_duplicates(keep="first")
+
+        bati_indus_ent.to_file(make_path(appariement_file_name, app_our_dir))
         
-        logger.info("Appariement done !")
+        logger.info(f"Appariement done for {name} on {year} : {bati_indus_ent.shape}")
         return bati_indus_ent
 
     logger.info("Load appariement")
@@ -361,7 +358,7 @@ class AppariementRunner:
         geosiren_buffer_path = TraitementGeoSiren(centroid=self.centroid,
                                              r=self.radius,
                                              name=self.roi_name,
-                                             year="2023"#get_year_from_datestring(date_analysis)
+                                             year=get_year_from_datestring(date_analysis)
                                              )
         
         logger.info(f"Geosiren : {geosiren_buffer_path}")
@@ -399,3 +396,8 @@ if __name__ == "__main__":
         radius=r).run(date_analysis=date_start)
     
     print(wh.shape)
+    
+"""
+to do : 
+- allow partial run with other radius (<25) without running whole pipeline
+"""
