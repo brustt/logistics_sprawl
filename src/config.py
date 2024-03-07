@@ -14,7 +14,7 @@ processed_data_path = os.path.join(project_path, "data/processed")
 """BDTOPO PARAMETERS"""
 URL_BDTOPO = "https://geoservices.ign.fr/bdtopo"
 selected_year = ["2008", "2013" ,"2023"] 
-dept_list = ["01", "38", "69"]
+dept_list = ["01", "38", "69", "42"]
 
 # Chemins vers le dossier des fichiers BDTOPO communes
 #BDTopoFPath = os.path.join("BDTOPO/COMMUNES","{}", "COMMUNES_{}.gpkg")
@@ -46,7 +46,7 @@ warehouse_name = "Entrepots_{}_{}_{}km.gpkg"
 
 
 """entrepots appariees"""
-appariement_name = "Entrepots_{}_{}_{}km_app.parquet"
+appariement_name = "Entrepots_{}_{}_{}km_app.gpkg"
 #appariement_path = os.path.join(processed_data_path, "{}", "ZoneEtude")
 
 
@@ -57,5 +57,5 @@ GeosirenFPath = os.path.join(raw_data_path, "SIREN", "GeolocalisationEtablisseme
 SirenFPath = os.path.join(raw_data_path, "SIREN", "StockEtablissementHistorique_utf8.csv")
 
 # OUT : 
-geosiren_name = "GeoSiren_{}_{}km.parquet"
+geosiren_name = "GeoSiren_{}_{}km.gpkg"
 siren_name = "SIREN_Entrepots_{}.csv"

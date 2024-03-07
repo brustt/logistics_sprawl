@@ -21,10 +21,14 @@ import requests
 import shutil
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any
-from src.utils import check_dir
-
+from src.utils import check_dir, timeit
 
 from src.config import *
+
+import logging
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s ::  %(message)s', level = logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def _download(url) -> requests.Response: 
@@ -42,12 +46,12 @@ def download_html(url) -> requests.Response:
     return _download(url)
     
 def download_7z(url, out_dir) -> str:
-    print(f"Go to to {url}")
+    logger.info(f"Go to to {url}")
     content =  _download(url)
     out_path = os.path.join(out_dir, os.path.basename(url))
     with open(out_path, 'wb') as out:
         out.write(content)
-    print(f"{out_path} downloaded !")
+    logger.info(f"{out_path} downloaded !")
     return out_path
 
 
@@ -86,7 +90,7 @@ def download_bdtopo(out_dir:str,
     if not os.path.exists(out_path):
         out_path = download_7z(href, out_dir)
     else:
-        print(f"skip download for {dept} on {year}")
+        logger.info(f"skip download for {dept} on {year}")
     return out_path
 
 
@@ -97,13 +101,13 @@ def extract_7z(arch_path, out_dir) -> str:
     out_path = os.path.join(out_dir, fname)
     if not os.path.exists(out_path):
     
-        print(f"extration process... {arch_path}")
+        logger.info(f"extration process... {arch_path}")
         if not any([_[0] == "7zip" for _ in shutil.get_unpack_formats()]):
             shutil.register_unpack_format('7zip', ['.7z'], unpack_7zarchive)
         shutil.unpack_archive(arch_path, out_dir)
-        print(f"extracted {os.path.join(out_dir, fname)}")
+        logger.info(f"extracted {os.path.join(out_dir, fname)}")
     else:
-        print(f"Archive already extracted : {out_path}")
+        logger.info(f"Archive already extracted : {out_path}")
     return out_path
 
 
@@ -129,24 +133,27 @@ def _extract_bati_new_bdtopo(list_path) -> List[gpd.GeoDataFrame]:
     nature = "Industriel, agricole ou commercial"
     usage = "Industriel"
     usage1b = "Commercial et services"
-    print("new nomenclature")
+    logger.info("new nomenclature")
     list_df = []
-    
-    gen_df = (gpd.read_file(path, crs=CRS) for path in list_path) 
+    columns = ["ID", "NATURE", "geometry"]
+    columns_extend = columns + ["USAGE1", "USAGE2"]
+
+    gen_df = (gpd.read_file(path, crs=CRS)[columns_extend] for path in list_path) 
     
     for df in gen_df:
         list_df.append(
-            df[
+            df.loc[
             ((df["NATURE"] == nature) & (df["USAGE1"] == usage)) | 
-            ((df["NATURE"] == nature) & (df["USAGE1"] == usage1b) & (df["USAGE2"] == usage))
+            ((df["NATURE"] == nature) & (df["USAGE1"] == usage1b) & (df["USAGE2"] == usage)), columns
             ]
         )
     return list_df
  
 
 def _extract_bati_old_bdtopo(list_path: List[str]) -> List[gpd.GeoDataFrame]: 
-    print(list_path)
-    list_df = [gpd.read_file(path, crs=CRS) for path in list_path]
+    logger.info(list_path)
+    columns = ["ID", "NATURE", "geometry"]
+    list_df = [gpd.read_file(path, crs=CRS)[columns] for path in list_path]
     return list_df
     
     
@@ -171,7 +178,7 @@ def extract_bati_on_roi(path: str, roi: gpd.GeoDataFrame, year: str) -> gpd.GeoD
     
     list_df = extract_bati_indus(target_f_path, year)
     
-    list_df = [gpd.sjoin(df, roi, how="inner", predicate="within") for df in list_df]
+    list_df = [gpd.sjoin(df, roi, how="inner", predicate="within").drop("index_right", axis=1) for df in list_df]
     df_y = pd.concat(list_df)
     
     return df_y
@@ -193,7 +200,7 @@ def extract_communes_on_roi(path: str, roi: gpd.GeoDataFrame) -> gpd.GeoDataFram
     return df
 
 
-
+@timeit
 def pipeline_bdtopo_year(dept_list: List[str],
                     name_roi: str,
                     year: str, 
@@ -229,30 +236,30 @@ def pipeline_bdtopo_year(dept_list: List[str],
         # download bdtopo
         arch_path = download_bdtopo(out_dir_raw, dept, year, URL_BDTOPO, format=format)
         bd_path = extract_7z(arch_path, out_dir_raw)
-        print(f"work on {bd_path}")
+        logger.info(f"work on {bd_path}")
         # extract building on roi
         paths_bati.append(extract_bati_path(bd_path))
         # extract communes on roi
         paths_communes.append(extract_communes_path(bd_path, ext_file))
 
-    print("-- Process buildings and communes --")
+    logger.info("-- Process buildings and communes --")
 
     # extract building and communes
     communes = [extract_communes_on_roi(path, roi) for path in paths_communes]
     communes = pd.concat(communes)
 
     # define unary_union roi based on communes
-    rio_com_union = gpd.sjoin(communes, roi, how="inner", predicate="intersects").drop("index_right", axis=1).dissolve()
+    rio_com_union = gpd.sjoin(communes[["geometry"]], roi, how="inner", predicate="intersects").drop("index_right", axis=1).dissolve()
     
     # extract building on communes
-    bati =[extract_bati_on_roi(path, rio_com_union, year) for path in paths_bati]
+    bati =[extract_bati_on_roi(path, rio_com_union[["geometry"]], year) for path in paths_bati]
     bati = pd.concat(bati)
 
     # Save
     bati.to_crs(CRS).to_file(os.path.join(out_dir_processed, bati_indus_file_name.format(name_roi, year)))
     communes.to_crs(CRS).to_file(os.path.join(out_dir_processed, communes_roi_file_name.format(name_roi, year)))
 
-    print(f"year {year} done")
+    logger.info(f"year {year} done")
     if clean_dir: 
         shutil.rmtree(bd_path)
 
@@ -261,7 +268,7 @@ if __name__ == "__main__":
     metro = '_'.join(METRO_NAME.lower().split(" "))
 
     for year in selected_year:
-        print(f"==== {year} ====")
+        logger.info(f"==== {year} ====")
         pipeline_bdtopo_year(dept_list=dept_list,
                             name_roi=metro,
                             year=year, 

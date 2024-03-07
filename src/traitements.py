@@ -51,8 +51,8 @@ def TraitementSiren(date):
         siren_nom = siren.dropna(subset=["nomenclatureActivitePrincipaleEtablissement"])
         siren_nap = siren_nom[siren_nom["nomenclatureActivitePrincipaleEtablissement"].str.startswith("NAP")]
         siren_naf = siren_nom[siren_nom["nomenclatureActivitePrincipaleEtablissement"].str.startswith("NAF1993")]
-        siren_na2 = siren_nom[siren_nom["nomenclatureActivitePrincipaleEtablissement"].str.startswith("NAFRev1")]
-        siren_na1 = siren_nom[siren_nom["nomenclatureActivitePrincipaleEtablissement"].str.startswith("NAFRev2")]
+        siren_na1 = siren_nom[siren_nom["nomenclatureActivitePrincipaleEtablissement"].str.startswith("NAFRev1")]
+        siren_na2 = siren_nom[siren_nom["nomenclatureActivitePrincipaleEtablissement"].str.startswith("NAFRev2")]
 
         # Entités correspondant à des entrepôts pour chaque nomenclatures
         # Nomenclature NAP
@@ -81,15 +81,19 @@ def TraitementSiren(date):
         siren_ent["dateDebut"] = siren_ent["dateDebut"].fillna(datetime.strptime('1900-01-01','%Y-%m-%d'))
         siren_ent = siren_ent[siren_ent["dateDebut"] < date]
         siren_ent = siren_ent[siren_ent["dateFin"] > date]
+        
+        logger.info(f"SIREN : {siren_ent.shape}")
 
         # Enregistrement de SIREN entrepôts
         siren_ent.to_csv(make_path(siren_name.format(datestr), SirenEntrepotsFolder), index=False)
         
-        return siren_ent
+        del siren_ent
+        
+        return make_path(siren_name.format(datestr), SirenEntrepotsFolder)
 
     logger.info("Load Siren file")
 
-    return pd.read_csv(make_path(siren_name.format(datestr), SirenEntrepotsFolder))
+    return make_path(siren_name.format(datestr), SirenEntrepotsFolder)
 
 # Etape 2 : traitement de GeoSIREN
 @timeit
@@ -135,28 +139,8 @@ def TraitementGeoSiren(centroid,
         if not os.path.exists(make_path(ze_file_name, ze_dir)):
             logger.info("Communes on buffer...")
 
-            # Création du buffer
-            buffer = gpd.GeoDataFrame(geometry=[Point(centroid)], crs=CRS).buffer(r).to_frame()
-            buffer.to_file(make_path(ze_file_name, ze_dir))
-
-            # Création de la zone d'étude avec les communes qui intersectes le buffer
-            # load from download_topo output : warning communes limit max 25k (default value)
-            communes_path = os.path.join(
-                communes_roi_dir.format(name, year),
-                communes_roi_file_name.format(name, year)
-            )
-            communes = gpd.read_file(communes_path).to_crs(CRS)
+            ze = get_ze_from_radius(centroid, r, name, year)
             
-            ze = (
-                gpd.sjoin(
-                    communes[["geometry"]], 
-                    buffer, 
-                    predicate="intersects", 
-                    how="inner"
-                    )
-                .drop("index_right", axis=1)
-                .dissolve()
-            )
             # Enregistre la zone d'étude
             ze.to_file(make_path(ze_file_name, ze_dir))
         
@@ -172,7 +156,7 @@ def TraitementGeoSiren(centroid,
         geosiren = (
             gpd.sjoin(
                 geosiren, 
-                ze.dissolve(), 
+                ze, 
                 predicate="within", 
                 how="inner"
                 )
@@ -184,16 +168,48 @@ def TraitementGeoSiren(centroid,
         out_dir_siren = check_dir(root_out_dir, "SIREN")
         siren_file_name = geosiren_name.format(name, radius_name)
         geosiren.to_file(make_path(siren_file_name,  out_dir_siren), index=False)
-        return geosiren
+        logger.info(f"GEOSIREN : {geosiren.shape}")
+
+        del geosiren
+        
+        return make_path(siren_file_name,  out_dir_siren)
     
     logger.info("Load GeoSiren file")
 
-    return gpd.read_file(make_path(siren_file_name,  out_dir_siren))
+    return make_path(siren_file_name,  out_dir_siren)
+
+
+def get_ze_from_radius(centroid, r, name, year):
+    
+    # Création du buffer
+    buffer = gpd.GeoDataFrame(geometry=[Point(centroid)], crs=CRS).buffer(r).to_frame()
+    #buffer.to_file(make_path(ze_file_name, ze_dir))
+
+    # Création de la zone d'étude avec les communes qui intersectes le buffer
+    # load from download_topo output : warning communes limit max 25k (default value)
+    communes_path = os.path.join(
+        communes_roi_dir.format(name, year),
+        communes_roi_file_name.format(name, year)
+    )
+    communes = gpd.read_file(communes_path).to_crs(CRS)
+    
+    ze = (
+        gpd.sjoin(
+            communes[["geometry"]], 
+            buffer, 
+            predicate="intersects", 
+            how="inner"
+            )
+        .drop("index_right", axis=1)
+        .dissolve()
+    )
+    
+    return ze
 
 # Etape 3 : jointure SIREN et GeoSIREN
 @timeit
-def JoinSirenGeosiren(siren_date: pd.DataFrame, 
-                      geosiren_zone: gpd.GeoDataFrame, 
+def JoinSirenGeosiren(siren_date_path: str, 
+                      geosiren_zone_path: str, 
                       year: str, 
                       name: str, 
                       r: int):
@@ -216,24 +232,37 @@ def JoinSirenGeosiren(siren_date: pd.DataFrame,
     wh_file_name = warehouse_name.format(name, year, radius_name)
     
     if not os.path.exists(make_path(wh_file_name, root_out_dir)):
-        # Jointure sur le champ SIRET - we keep siret as str
+        
+        siren_date = pd.read_csv(siren_date_path)
+        geosiren_zone = gpd.read_file(geosiren_zone_path)
+        print(f"siren : {siren_date.shape}")
+        print(f"geosiren : {geosiren_zone.shape}")
+
+        # Jointure sur le champ SIRET - we convert to int  - doesn't matter
+        siren_date["siret"] = siren_date["siret"].astype(int)
+        geosiren_zone["siret"] = geosiren_zone["siret"].astype(int)
+
         merged_siren = pd.merge(siren_date, geosiren_zone, on="siret")
         merged_siren = gpd.GeoDataFrame(merged_siren, geometry="geometry", crs=CRS)
-        print(type(merged_siren))
-
+        print(merged_siren.columns)
         # Enregistre la jointure
         merged_siren.to_file(make_path(wh_file_name, root_out_dir), index=False)
+        logger.info(f"MERGE SIREN : {merged_siren.shape}")
 
-        return merged_siren
-    
+        del siren_date
+        del geosiren_zone
+        del merged_siren
+        
+        return make_path(wh_file_name, root_out_dir)
+
     logger.info("Load merge Siren and GeoSiren")
 
-    return gpd.read_file(make_path(wh_file_name, root_out_dir))
+    return make_path(wh_file_name, root_out_dir)
 
 # Etape 4 : Appariement SIREN entrepôts et BDTOPO bâti industriel
 @timeit
 def AppSirenBDTopo(name: str,
-                   entrepots_siren: gpd.GeoDataFrame,
+                   entrepots_siren_path: str,
                    year: str,
                    r: int,
                    dist_siren_bdtopo: float=50.0,
@@ -256,11 +285,18 @@ def AppSirenBDTopo(name: str,
     logger.info("Appariement processing...")
     
     # check root_dir exist
-    root_out_dir = check_dir(processed_data_path, name, year, 'Appariement')
+    root_out_dir = check_dir(processed_data_path, name, year)
+    app_our_dir = check_dir(root_out_dir, "Appariement")
     
     appariement_file_name = appariement_name.format(name.upper(), year, int(r/1000))
-    if not os.path.exists(make_path(appariement_file_name, root_out_dir)):
-
+    
+    ze_file_name = ze_name.format(name, int(r/1000))
+    ze_dir = make_path(ze_file_name, root_out_dir, "ZoneEtude")
+    
+    if not os.path.exists(make_path(appariement_file_name, root_out_dir)) or True: #break condition
+        
+        entrepots_siren = gpd.read_file(entrepots_siren_path)
+        
         # Ouvertur du shapefile des bâtiments industriels de la bdtopo
         bati_indus = (
             gpd.read_file(
@@ -285,11 +321,14 @@ def AppSirenBDTopo(name: str,
 
         # Calcul des lignes qui sont plus grande que la distance max voulue avec un batiment de la bdtopo
         lines_app = lines_gdf[lines_gdf["geometry"].length < dist_siren_bdtopo]
+        logger.info(f"Lines dist_min : {lines_app.shape}")
 
         # Calcul des bâtiment de la bdtopo correspondant à un point d'entrepôt siren et dont la surface est plus grande que le seuil voulu
         bati_indus_ent = bati_indus[bati_indus["geometry"].intersects(lines_app.unary_union) | bati_indus["geometry"].intersects(entrepots_siren.unary_union)]
+        #bati_indus_ent = bati_indus[bati_indus["geometry"].intersects(lines_app.unary_union)]
+        #bati_indus_ent = gpd.sjoin(bati_indus, lines_app[["geometry"]], how="inner", predicate="intersects").drop("index_right", axis=1)
         bati_indus_ent = bati_indus_ent[bati_indus_ent["geometry"].area > seuil_surf_ent]
-
+        
         # Enregistrement des entrepôts à la date voulue
         
         bati_indus_ent.to_file(make_path(appariement_file_name, root_out_dir))
@@ -315,30 +354,30 @@ class AppariementRunner:
     @timeit
     def run(self, date_analysis: str):
         
-        siren_ent = TraitementSiren(date_analysis)
+        siren_ent_path = TraitementSiren(date_analysis)
 
-        logger.info(f"Siren : {siren_ent.shape}")
+        logger.info(f"Siren : {siren_ent_path}")
 
-        geosiren_buffer = TraitementGeoSiren(centroid=self.centroid,
+        geosiren_buffer_path = TraitementGeoSiren(centroid=self.centroid,
                                              r=self.radius,
                                              name=self.roi_name,
                                              year="2023"#get_year_from_datestring(date_analysis)
                                              )
         
-        logger.info(f"Geosiren : {geosiren_buffer.shape}")
+        logger.info(f"Geosiren : {geosiren_buffer_path}")
         
-        merged_siren = JoinSirenGeosiren(siren_date=siren_ent,
-                                        geosiren_zone=geosiren_buffer,
+        merged_siren_path = JoinSirenGeosiren(siren_date_path=siren_ent_path,
+                                        geosiren_zone_path=geosiren_buffer_path,
                                         year=get_year_from_datestring(date_analysis),
                                         name=self.roi_name,
                                         r=self.radius)
 
         
-        logger.info(f"Merge : {merged_siren.shape}")
+        logger.info(f"Merge : {merged_siren_path}")
 
         
         warehouses = AppSirenBDTopo(name=self.roi_name,
-                                    entrepots_siren=merged_siren,
+                                    entrepots_siren_path=merged_siren_path,
                                     year=get_year_from_datestring(date_analysis),
                                     r=self.radius)
         
@@ -348,10 +387,11 @@ class AppariementRunner:
     
 if __name__ == "__main__":
     
-    r = 25000.0 # rayon de la zone d'étude en mètres
+    r = 25_000 # rayon de la zone d'étude en mètres
     roi_name = METRO_NAME.lower()
     # Paramétrage de la période d'étude
-    date_start = '2023-01-01' # date de début
+    date_start = '2013-01-01' # date de début
+    logger.info(f"== {date_start} == ")
     
     wh = AppariementRunner(
         centroid=CENTER,
