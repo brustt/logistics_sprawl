@@ -441,23 +441,19 @@ class AppariementRunner:
     
 if __name__ == "__main__":
     
-    r = 25_000 # rayon de la zone d'étude en mètres
-    roi_name = METRO_NAME.lower()
-    # Paramétrage de la période d'étude
-    date_start_list = ['2008-01-01', '2013-01-01', '2023-01-01']
-    
-    for date_start in date_start_list:
+    roi_name = "lyon"
+    # Paramétrage de la période d'étude    
+    for date_start in SELECTED_YEARS:
     
         logger.info(f"== {date_start} == ")
         
-        radius_list = [5_000, 10_000, 15_000, 20_000, 25_000]
         
         wh_builder = AppariementRunner(
             date_analysis=date_start,
-            centroid=CENTER,
+            centroid=ENTRY_ROI[roi_name]["CENTER"],
             roi_name=roi_name)
         
-        for r in radius_list:
+        for r in RADIUS_LIST:
             
             logger.info(f"-- {date_start[:4]} {int(r/1000)}km --")
         

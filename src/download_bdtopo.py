@@ -265,13 +265,13 @@ def pipeline_bdtopo_year(dept_list: List[str],
 
 
 if __name__ == "__main__":
-    metro = '_'.join(METRO_NAME.lower().split(" "))
+    roi_name = "lyon"
 
-    for year in selected_year:
+    for year in SELECTED_YEARS:
         logger.info(f"==== {year} ====")
-        pipeline_bdtopo_year(dept_list=dept_list,
-                            name_roi=metro,
+        pipeline_bdtopo_year(dept_list=ENTRY_ROI[roi_name]["DEPT_LIST"],
+                            name_roi=roi_name,
                             year=year, 
-                            centroid=CENTER,
+                            centroid=ENTRY_ROI[roi_name]["CENTER"],
                             format="SHP", 
                             clean_dir=False)

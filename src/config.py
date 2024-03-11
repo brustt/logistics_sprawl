@@ -4,6 +4,19 @@ from dotenv import find_dotenv
 
 CRS = 2154
 
+"""INPUTS PARAMETERS"""
+# Paramétrage de la zone d'étude
+DIST_RADIUS = 25_000
+RADIUS_LIST = [5_000, 10_000, 15_000, 20_000, DIST_RADIUS]
+
+# add new town here
+ENTRY_ROI = {
+    "lyon": {
+        "CENTER":(841650.0, 6517765.0),
+        "DEPT_LIST":["01", "38", "69", "42"],
+    }
+    
+}
 
 project_path = os.path.dirname(find_dotenv())
 
@@ -13,8 +26,8 @@ processed_data_path = os.path.join(project_path, "data/processed")
 
 """BDTOPO PARAMETERS"""
 URL_BDTOPO = "https://geoservices.ign.fr/bdtopo"
-selected_year = ["2008", "2013" ,"2023"] 
-dept_list = ["01", "38", "69", "42"]
+SELECTED_YEARS = ["2008", "2013" ,"2023"] 
+
 
 # Chemins vers le dossier des fichiers BDTOPO communes
 #BDTopoFPath = os.path.join("BDTOPO/COMMUNES","{}", "COMMUNES_{}.gpkg")
@@ -26,13 +39,6 @@ bati_indus_file_name = "bati_indus_{}_{}.gpkg"
 communes_roi_dir = os.path.join(processed_data_path, "{}", "{}", "BDTOPO") #name, year
 communes_roi_file_name = "communes_{}_{}.gpkg" #name, #year
 
-
-
-"""ROI INPUTS PARAMETERS"""
-# Paramétrage de la zone d'étude
-METRO_NAME = "LYON" # nom de la zone en string
-CENTER = (841650.0, 6517765.0) # coordonnées du centre de la zone d'étude (x,y)
-DIST_RADIUS = 25_000
 
 """ZE"""
 # buffer area on communes intersection

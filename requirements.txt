@@ -8,3 +8,4 @@ py7zr
 pyarrow
 matplotlib 
 mapclassify
+seaborn
