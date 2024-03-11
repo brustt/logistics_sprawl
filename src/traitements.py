@@ -200,6 +200,34 @@ def TraitementGeoSiren(centroid,
 
     return make_path(siren_file_name,  out_dir_siren)
 
+def get_communes_from_radius(centroid, r, name, year, columns=None):
+    # Création du buffer
+    buffer = gpd.GeoDataFrame(geometry=[Point(centroid)], crs=CRS).buffer(r).to_frame()
+    #buffer.to_file(make_path(ze_file_name, ze_dir))
+
+    # Création de la zone d'étude avec les communes qui intersectes le buffer
+    # load from download_topo output : warning communes limit max 25k (default value)
+    communes_path = os.path.join(
+        communes_roi_dir.format(name, year),
+        communes_roi_file_name.format(name, year)
+    )
+    communes = gpd.read_file(communes_path).to_crs(CRS)
+    
+    columns = list(communes.columns) if columns else ["geometry"]    
+        
+    ze = (
+        gpd.sjoin(
+            communes[columns], 
+            buffer, 
+            predicate="intersects", 
+            how="inner"
+            )
+        .drop("index_right", axis=1)
+    )
+    
+    ze = ze.rename({"POPULATION":"POPUL"}, axis=1)
+    
+    return ze
 
 def get_ze_from_radius(centroid, r, name, year, columns=None):
     
@@ -215,7 +243,7 @@ def get_ze_from_radius(centroid, r, name, year, columns=None):
     )
     communes = gpd.read_file(communes_path).to_crs(CRS)
     
-    columns = communes.columns if columns else ["geometry"]    
+    columns = list(communes.columns) if columns else ["geometry"]    
         
     ze = (
         gpd.sjoin(
