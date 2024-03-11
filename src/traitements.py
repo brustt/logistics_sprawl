@@ -45,7 +45,10 @@ def TraitementSiren(date):
         date = datetime.strptime(datestr, "%Y-%m-%d")
 
         # Ouverture du csv SIREN
-        siren = pd.read_csv(SirenFPath, usecols=["siret","activitePrincipaleEtablissement","nomenclatureActivitePrincipaleEtablissement", "dateDebut", "dateFin"], dtype=str)
+        siren = pd.read_csv(SirenFPath, 
+                            usecols=["siret","activitePrincipaleEtablissement","nomenclatureActivitePrincipaleEtablissement", "dateDebut", "dateFin"], 
+                            dtype=str, 
+                            )
 
         # Entités où la nomenclature est renseignée
         siren_nom = siren.dropna(subset=["nomenclatureActivitePrincipaleEtablissement"])
@@ -98,9 +101,9 @@ def TraitementSiren(date):
 # Etape 2 : traitement de GeoSIREN
 @timeit
 def TraitementGeoSiren(centroid, 
-                       r, 
                        name, 
-                       year):
+                       year,
+                       r: int = None):
     
     """ Etape 2 : traitement de GeoSIREN
 
@@ -114,34 +117,54 @@ def TraitementGeoSiren(centroid,
         pandas.DataFrame: tableau des entités dans la zone d'étude
     """
     
+    def load_raw():
+        geosiren = pd.read_csv(GeosirenFPath, 
+                               sep=';', 
+                               usecols=["siret", "x", "y", "epsg"], 
+                               dtype={"siret":str}, 
+                               )
+        # Récupère les données référencées en Lambert 93 (EPSG:2154)
+        geosiren = geosiren.loc[geosiren["epsg"] == CRS, :]
+        return geosiren
+    
+    def load_precompute(geosiren_zone_path: str):
+        return gpd.read_file(geosiren_zone_path)
+        
+    precompute=True
+
+    if r is None: 
+        r=DIST_RADIUS
+        precompute=False
+    
     # check root_dir exist
     root_out_dir = check_dir(processed_data_path, name, year)
     radius_name = int(r/1000)
     
+    # already done in download_bdtopo
+    ze_dir = check_dir(root_out_dir, "ZoneEtude")
+    ze_file_name = ze_name.format(name, radius_name)
+    
     out_dir_siren = check_dir(root_out_dir, "SIREN")
     siren_file_name = geosiren_name.format(name, radius_name)
+    
     if not os.path.exists(make_path(siren_file_name,  out_dir_siren)):
         logger.info("Process GeoSiren file")
         logger.info("Load GeoSiren file...")
 
-        # Ouverture du csv GEOSIREN see config - specify str to siret to prevent error for 0XXX codes (not int)
-        geosiren = pd.read_csv(GeosirenFPath, sep=';', usecols=["siret", "x", "y", "epsg"], dtype={"siret":str})
-        logger.info("GeoSiren file loaded !")
+        if not precompute:
+            # Ouverture du csv GEOSIREN see config - specify str to siret to prevent error for 0XXX codes (not int)
+            geosiren = load_raw()
+            logger.info("GeoSiren file loaded !")
+        else:
+            # load pre-compute geosiren for DIST_RADIUS
+            geosiren = load_precompute(make_path(geosiren_name.format(name, int(DIST_RADIUS/1000)),  out_dir_siren))
 
-
-        # Récupère les données référencées en Lambert 93 (EPSG:2154)
-        geosiren = geosiren.loc[geosiren["epsg"] == CRS, :]
         
-        # already done in download_bdtopo
-        ze_dir = check_dir(root_out_dir, "ZoneEtude")
-        ze_file_name = ze_name.format(name, radius_name)
         # very fast not needed but ok
         if not os.path.exists(make_path(ze_file_name, ze_dir)):
             logger.info("Communes on buffer...")
 
             ze = get_ze_from_radius(centroid, r, name, year)
-            
-            # Enregistre la zone d'étude
             ze.to_file(make_path(ze_file_name, ze_dir))
         
         else :
@@ -166,7 +189,6 @@ def TraitementGeoSiren(centroid,
 
         # Enregistre le GeoSiren de la zone d'étude
         out_dir_siren = check_dir(root_out_dir, "SIREN")
-        siren_file_name = geosiren_name.format(name, radius_name)
         geosiren.to_file(make_path(siren_file_name,  out_dir_siren), index=False)
         logger.info(f"GEOSIREN : {geosiren.shape}")
 
@@ -179,7 +201,7 @@ def TraitementGeoSiren(centroid,
     return make_path(siren_file_name,  out_dir_siren)
 
 
-def get_ze_from_radius(centroid, r, name, year):
+def get_ze_from_radius(centroid, r, name, year, columns=None):
     
     # Création du buffer
     buffer = gpd.GeoDataFrame(geometry=[Point(centroid)], crs=CRS).buffer(r).to_frame()
@@ -193,9 +215,11 @@ def get_ze_from_radius(centroid, r, name, year):
     )
     communes = gpd.read_file(communes_path).to_crs(CRS)
     
+    columns = communes.columns if columns else ["geometry"]    
+        
     ze = (
         gpd.sjoin(
-            communes[["geometry"]], 
+            communes[columns], 
             buffer, 
             predicate="intersects", 
             how="inner"
@@ -203,6 +227,8 @@ def get_ze_from_radius(centroid, r, name, year):
         .drop("index_right", axis=1)
         .dissolve()
     )
+    
+    ze = ze.rename({"POPULATION":"POPUL"}, axis=1)
     
     return ze
 
@@ -217,7 +243,7 @@ def JoinSirenGeosiren(siren_date_path: str,
 
     Args:
         siren_date (pandas.DataFrame): tableau des entrepôts dans SIREN à la date voulue (étape 1).
-        geosiren_zone (pandas.DataFrame): tableau des bâtiments dans la zone d'étude (étape 2).
+        geosiren_zone (pandas.DataFrame): tableau des bâtiments dans le buffer_max
         year (string): annee de l'étude YYYY
         name (string): nom de la zone d'étude.
         r (float): rayon de la zone d'étude en km.
@@ -287,10 +313,10 @@ def AppSirenBDTopo(name: str,
     
     appariement_file_name = appariement_name.format(name.upper(), year, int(r/1000))
     
-    ze_file_name = ze_name.format(name, int(r/1000))
-    ze_dir = make_path(ze_file_name, root_out_dir, "ZoneEtude")
+    #ze_file_name = ze_name.format(name, int(r/1000))
+    #ze_dir = make_path(ze_file_name, root_out_dir, "ZoneEtude")
     
-    if not os.path.exists(make_path(appariement_file_name, root_out_dir)) or True: #break condition
+    if not os.path.exists(make_path(appariement_file_name, root_out_dir)):
         
         entrepots_siren = gpd.read_file(entrepots_siren_path)
         
@@ -340,45 +366,48 @@ def AppSirenBDTopo(name: str,
 
 class AppariementRunner:
     def __init__(self, 
+                 date_analysis: str,
                  centroid:Tuple[float],
-                 roi_name:str,
-                 radius: int):
+                 roi_name:str):
         
         self.centroid = centroid
         self.roi_name = '_'.join(roi_name.lower().split(" "))
-        self.radius = radius
+        self.date_analysis = date_analysis
         
-    @timeit
-    def run(self, date_analysis: str):
-        
-        siren_ent_path = TraitementSiren(date_analysis)
-
-        logger.info(f"Siren : {siren_ent_path}")
-
-        geosiren_buffer_path = TraitementGeoSiren(centroid=self.centroid,
-                                             r=self.radius,
+        # pre compute data for max buffer
+        self.siren_ent_path = TraitementSiren(self.date_analysis)
+        self.geosiren_buffer_path = TraitementGeoSiren(centroid=self.centroid,
                                              name=self.roi_name,
-                                             year=get_year_from_datestring(date_analysis)
+                                             year=get_year_from_datestring(self.date_analysis),
+                                             r=None
                                              )
         
-        logger.info(f"Geosiren : {geosiren_buffer_path}")
+    @timeit
+    def run(self, radius:int):
         
-        merged_siren_path = JoinSirenGeosiren(siren_date_path=siren_ent_path,
-                                        geosiren_zone_path=geosiren_buffer_path,
-                                        year=get_year_from_datestring(date_analysis),
+
+        self.geosiren_buffer_path = TraitementGeoSiren(centroid=self.centroid,
+                                             name=self.roi_name,
+                                             year=get_year_from_datestring(self.date_analysis),
+                                             r=radius
+                                             )
+        
+        logger.info(f"Geosiren : {self.geosiren_buffer_path}")
+        
+        merged_siren_path = JoinSirenGeosiren(siren_date_path=self.siren_ent_path,
+                                        geosiren_zone_path=self.geosiren_buffer_path,
+                                        year=get_year_from_datestring(self.date_analysis),
                                         name=self.roi_name,
-                                        r=self.radius)
+                                        r=radius)
 
         
         logger.info(f"Merge : {merged_siren_path}")
 
-        
         warehouses = AppSirenBDTopo(name=self.roi_name,
                                     entrepots_siren_path=merged_siren_path,
-                                    year=get_year_from_datestring(date_analysis),
-                                    r=self.radius)
+                                    year=get_year_from_datestring(self.date_analysis),
+                                    r=radius)
         
-
         return warehouses
     
     
@@ -387,17 +416,24 @@ if __name__ == "__main__":
     r = 25_000 # rayon de la zone d'étude en mètres
     roi_name = METRO_NAME.lower()
     # Paramétrage de la période d'étude
-    date_start = '2013-01-01' # date de début
-    logger.info(f"== {date_start} == ")
+    date_start_list = ['2008-01-01', '2013-01-01', '2023-01-01']
     
-    wh = AppariementRunner(
-        centroid=CENTER,
-        roi_name=roi_name,
-        radius=r).run(date_analysis=date_start)
+    for date_start in date_start_list:
     
-    print(wh.shape)
+        logger.info(f"== {date_start} == ")
+        
+        radius_list = [5_000, 10_000, 15_000, 20_000, 25_000]
+        
+        wh_builder = AppariementRunner(
+            date_analysis=date_start,
+            centroid=CENTER,
+            roi_name=roi_name)
+        
+        for r in radius_list:
+            
+            logger.info(f"-- {date_start[:4]} {int(r/1000)}km --")
+        
+            wh = wh_builder.run(radius=r)
+        
+            print(wh.shape)
     
-"""
-to do : 
-- allow partial run with other radius (<25) without running whole pipeline
-"""
