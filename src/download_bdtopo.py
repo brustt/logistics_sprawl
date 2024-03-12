@@ -265,8 +265,9 @@ def pipeline_bdtopo_year(dept_list: List[str],
 
 
 if __name__ == "__main__":
-    roi_name = "lyon"
-
+    
+    roi_name = ROI_NAME[:]
+    
     for year in SELECTED_YEARS:
         logger.info(f"==== {year} ====")
         pipeline_bdtopo_year(dept_list=ENTRY_ROI[roi_name]["DEPT_LIST"],

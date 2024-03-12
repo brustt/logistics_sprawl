@@ -8,12 +8,18 @@ CRS = 2154
 # Paramétrage de la zone d'étude
 DIST_RADIUS = 25_000
 RADIUS_LIST = [5_000, 10_000, 15_000, 20_000, DIST_RADIUS]
+SELECTED_YEARS = ["2008", "2013" ,"2023"] 
 
 # add new town here
+ROI_NAME = "bordeaux"
 ENTRY_ROI = {
     "lyon": {
         "CENTER":(841650.0, 6517765.0),
         "DEPT_LIST":["01", "38", "69", "42"],
+    },
+    "bordeaux": {
+        "CENTER":(417700.0, 6421717.0),
+        "DEPT_LIST":["33"],
     }
     
 }
@@ -26,7 +32,6 @@ processed_data_path = os.path.join(project_path, "data/processed")
 
 """BDTOPO PARAMETERS"""
 URL_BDTOPO = "https://geoservices.ign.fr/bdtopo"
-SELECTED_YEARS = ["2008", "2013" ,"2023"] 
 
 
 # Chemins vers le dossier des fichiers BDTOPO communes

@@ -132,7 +132,7 @@ def TraitementGeoSiren(centroid,
         
     precompute=True
 
-    if r is None: 
+    if r is None: #and not os.path.exists(make_path(siren_file_name,  out_dir_siren)): 
         r=DIST_RADIUS
         precompute=False
     
@@ -147,17 +147,20 @@ def TraitementGeoSiren(centroid,
     out_dir_siren = check_dir(root_out_dir, "SIREN")
     siren_file_name = geosiren_name.format(name, radius_name)
     
+
+    
     if not os.path.exists(make_path(siren_file_name,  out_dir_siren)):
-        logger.info("Process GeoSiren file")
+        logger.info(f"Process GeoSiren file {year} - {radius_name}km")
         logger.info("Load GeoSiren file...")
 
         if not precompute:
             # Ouverture du csv GEOSIREN see config - specify str to siret to prevent error for 0XXX codes (not int)
             geosiren = load_raw()
-            logger.info("GeoSiren file loaded !")
+            logger.info(f"GeoSiren file loaded {year}!")
         else:
             # load pre-compute geosiren for DIST_RADIUS
             geosiren = load_precompute(make_path(geosiren_name.format(name, int(DIST_RADIUS/1000)),  out_dir_siren))
+            logger.info(f"FIX GeoSiren file precomputed loaded for {r} - geosiren : {geosiren.shape}!")
 
         
         # very fast not needed but ok
@@ -168,6 +171,7 @@ def TraitementGeoSiren(centroid,
             ze.to_file(make_path(ze_file_name, ze_dir))
         
         else :
+            logger.info("Load communes on buffer...")
             ze = gpd.read_file(make_path(ze_file_name, ze_dir))
 
         geosiren = gpd.GeoDataFrame(
@@ -185,12 +189,13 @@ def TraitementGeoSiren(centroid,
                 )
             .drop(["index_right"], axis=1)
         )
+        logger.info(f"FIX JOIN GeoSiren  for {year} - geosiren : {geosiren.shape}!")
+
         logger.info(f"Save geosiren on roi..")
 
         # Enregistre le GeoSiren de la zone d'étude
         out_dir_siren = check_dir(root_out_dir, "SIREN")
         geosiren.to_file(make_path(siren_file_name,  out_dir_siren), index=False)
-        logger.info(f"GEOSIREN : {geosiren.shape}")
 
         del geosiren
         
@@ -256,8 +261,7 @@ def get_ze_from_radius(centroid, r, name, year, columns=None):
         .dissolve()
     )
     
-    ze = ze.rename({"POPULATION":"POPUL"}, axis=1)
-    
+    ze = ze.rename({"POPULATION":"POPUL"}, axis=1)    
     return ze
 
 # Etape 3 : jointure SIREN et GeoSIREN
@@ -289,6 +293,10 @@ def JoinSirenGeosiren(siren_date_path: str,
         
         siren_date = pd.read_csv(siren_date_path)
         geosiren_zone = gpd.read_file(geosiren_zone_path)
+        
+        logger.info(f"Siren {siren_date.shape}")
+        logger.info(f"Geosiren {geosiren_zone.shape}")
+
 
         # Jointure sur le champ SIRET - we convert to int  - doesn't matter
         siren_date["siret"] = siren_date["siret"].astype(int)
@@ -347,6 +355,7 @@ def AppSirenBDTopo(name: str,
     if not os.path.exists(make_path(appariement_file_name, root_out_dir)):
         
         entrepots_siren = gpd.read_file(entrepots_siren_path)
+        logger.info(f"Entrepot merge SIREN  {year}: {entrepots_siren.shape}")
         
         # Ouvertur du shapefile des bâtiments industriels de la bdtopo
         bati_indus = (
@@ -357,6 +366,8 @@ def AppSirenBDTopo(name: str,
                     )
                 ).reset_index(drop=True)
         )
+        logger.info(f"Batis Indus BDTOPO : {bati_indus.shape}")
+
         # Calcul des lignes la plus courtes entre un point d'entrepot siren et un batiment industriel de la bd topo (point à bord)
         lines,id = [],0
         for idx, point in entrepots_siren.iterrows():
@@ -368,6 +379,7 @@ def AppSirenBDTopo(name: str,
             item = ({'id':id, 'geometry':line})
             lines.append(item)
             id += 1
+        print(len(lines))
         lines_gdf = gpd.GeoDataFrame(lines, geometry='geometry',crs=CRS)
 
         # Calcul des lignes qui sont plus grande que la distance max voulue avec un batiment de la bdtopo
@@ -441,9 +453,13 @@ class AppariementRunner:
     
 if __name__ == "__main__":
     
-    roi_name = "lyon"
+    roi_name = ROI_NAME[:]
+    
+    # workaround
+    date_list = ['-'.join([_, "01-01"]) for _ in SELECTED_YEARS]
+
     # Paramétrage de la période d'étude    
-    for date_start in SELECTED_YEARS:
+    for date_start in date_list:
     
         logger.info(f"== {date_start} == ")
         

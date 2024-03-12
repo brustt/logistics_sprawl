@@ -69,7 +69,7 @@ def logistic_sprawl_analysis(centroid: Tuple[float],
         
     for r in RADIUS_LIST:
             
-        #logger.info(f"-- {date_start[:4]} {int(r/1000)}km --")
+        logger.info(f"-- {date_start[:4]} {int(r/1000)}km --")
         
         warehouses_t0 = wh_builder_t0.run(radius=r)
         warehouses_t1 = wh_builder_t1.run(radius=r)
@@ -107,7 +107,9 @@ def logistic_sprawl_analysis(centroid: Tuple[float],
     
     
 if __name__ == "__main__":
-    roi_name = "lyon"
+    
+    roi_name = ROI_NAME[:]
+
     main(roi_name)
 
 
