@@ -1,14 +1,21 @@
-# logistics_sprawl
+# Analysis of logistics sprawl over French cities
 
-IGAST Spatial Analysis project
+IGAST Spatial Analysis project 
 
 * C. Colliard
 * T. Hillairet
 * M. Dizier
 
+Sponsor : L.Dablanc (Logistic Chair, Université Gustave Effel)
 ---
-Analysis of logistics sprawl over French cities. POC over Lyon.
 
+Dablanc, 2023
+https://www.lvmt.fr/wp-content/uploads/2019/10/Dablanc-Schorung-De-Oliveira-Palacios-Arguello-De-Oliveira-Yaghi-October-2023.pdf
+
+
+Compute statistics for logistic sprawl with new automatic method generalizable over french metropolitan cities.
+
+Towns of study : Lyon (new in Logistic Chair BDD) and Bordeaux (use for comparison)
 
 python=3.10
 
